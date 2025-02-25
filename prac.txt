@@ -1,0 +1,398 @@
+-------------------------FAST API------------------------
+
+
+create a virtual env on my directory.
+then activate the env and install fast api-> pip install fastapi
+and install ->pip install uvicorn
+
+
+then run with this command:
+		uvicorn main:app --reload
+
+
+app = FastAPI() #instance
+@app.get('/') #decorate
+def index():
+    return {'data':{'name':'abin'}}
+
+path
+operation
+path operation decorator
+path operation function
+
+
+debug------
+
+i can run it in another port:
+import uvicorn
+ if __name__ == "--main__":
+	uvicorn.run(app,host="127.0.0.1",port =9000)
+
+the run it with python filename.py ----> it will run another port
+
+
+
+Pydantic Schemas----------
+
+	from pydentic import BaseModel.
+then create a model which extends BaseModel
+then can pass this as a request body
+
+-------------Database-------------]
+		SQL Alchemy
+create database.py in the directory
+	
+	import-->from sqlalchemy import create_engine
+then creade blog.db database and add following code on database.py
+
+	SQLALCHEMY_DATABAS_URL='sqlite:///./blog.db'
+connect_args = {"check_same_thread": False}
+engine= create_engine(SQLALCHEMY_DATABAS_URL,connect_args=connect_args)
+
+then import --->from sqlalchemy.ext.declarative import declarative_base
+		and add--->Base = declarative_base()
+then import--->>>> from sqlalchemy.orm import sessionmaker
+
+		SessionLocal = sessionmaker(bind=engine,autocommit=False,autoflush=False)
+
+
+-------------------database  connection  done------------------
+
+----------------Model table------------
+create models.py 
+then import-->
+from sqlalchemy import Column,Integer,String
+from database import Base
+and add---->
+class Blog(Base):
+    id = Column(Integer,primary_key=True,index=True)
+    title= Column(String)
+    body = Column(String)
+and then go to the main .py and add --->
+import models and engine then add
+models.Base.metadata.create_all(engine)
+
+
+also need to add __tablename__='tablename'
+
+------------------store blog to our database-------------
+
+from sqlalchemy.orm import Session
+
+
+@app.post('/blog')
+def create(request:schemas.Blog,db:Session):
+    return db
+but session is not a pydentic field
+so import Depends and add db:Session=Depends(get_db)
+and need to create get_db function also for this need to import SessionLocal
+
+def get_db():
+    db =SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+then it will be  a pydentic field
+
+then my postmethod --->
+@app.post('/blog')
+def create(request:schemas.Blog,db:Session =Depends(get_db)):
+    new_blog = models.Blog(title=request.title,body=request.body)
+    db.add(new_blog)
+    db.commit()
+    db.refresh(new_blog)
+    return new_blog
+for store the data into database
+
+---then add get method to see all the blogs
+	
+		@app.get('/blog')
+def all(db:Session =Depends(get_db)):
+    blogs = db.query(models.Blog).all()--------it saves all the blog what we creae from the post method
+    return blogs
+
+for showing particular blog add this get method
+@app.get('/blog/{id}')
+def show(id,db:Session =Depends(get_db)):
+    blog = db.query(models.Blog).filter(models.Blog.id ==id).first()
+    return blog
+we pass id as a parameter to the show function so that we can get the blog for the particular id
+and there is a problem if i enter a id that not exist that it can show response code 200 and null.
+
+-------can add status_code for the actual status code for response in the path operation decorator section
+we dont nedd to recognize the status code because we can import status from fastapi and then add all code which we need
+we can import respons from fast api and customize response code.so that it can response if the blog is availabe then ok if not then it will give another response
+
+---------
+@app.get('/blog/{id}',status_code=200)
+def show(id,response:Response,db:Session =Depends(get_db)):
+    blog = db.query(models.Blog).filter(models.Blog.id ==id).first()
+    if not blog:
+        response.status_code= status.HTTP_404_NOT_FOUND
+        return{'detail':f'Blog with the id {id} is not available'}
+    return blog
+import response the add 200 status code in the path operation decorator for default then add if condition to check if not available the return another response.
+----------also we can simply add this 
+raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f'Blogggg with the id {id} is not available')
+it will more handy.
+------------------------delete a blog----------
+
+@app.delete('/blog/{id}',status_code=status.HTTP_204_NO_CONTENT)
+def destroy(id,db:Session =Depends(get_db)):
+    db.query(models.Blog).filter(models.Blog.id ==id).delete(synchronize_session=False)
+    db.commit()
+    return 'done'
+if we deo something from database thn we need to commit.
+-----------------update a blog----------------
+@app.put('/blog/{id}',status_code=status.HTTP_202_ACCEPTED)
+def update(id,request:schemas.Blog,db:Session=Depends(get_db)):
+    db.query(models.Blog).filter(models.Blog.id == id).update({'title':'Updated title'})
+    db.commit()
+    return 'updated'
+but it will show only updated title we can pass the full body as a request by send request parameter
+
+@app.put('/blog/{id}',status_code=status.HTTP_202_ACCEPTED)
+def update(id: int, request: schemas.Blog, db: Session = Depends(get_db)):
+    blog_query = db.query(models.Blog).filter(models.Blog.id == id)
+    blog = blog_query.first()
+
+    if not blog:
+        raise HTTPException(status_code=404, detail="Blog not found")
+
+    blog_query.update(request.dict() if hasattr(request, "dict") else request.model_dump(), synchronize_session=False)
+    db.commit()
+    
+    return {"message": "Blog updated successfully"}
+
+
+
+
+------------------------Response Model -----------------------
+
+we con modify how we want to show the responses
+
+
+class ShowBlog(BaseModel):
+    title : str
+    class Config():
+        orm_mode=True
+and pass @app.get('/blog/{id}',status_code=200,response_model=schemas.ShowBlog)
+then we can customize as we want in this code only title will visible 
+also if we extend Blog and remove title:str then only title and body because it has Blog class
+
+
+add all blogs to pass this response_model=List[schemas.ShowBlog] and import List from typing and it work all blog with body and title.
+
+
+-----------Create User-----------
+
+in models.py----
+class User(Base):
+    __tablename__='users'
+    id = Column(Integer,primary_key=True,index=True)
+    name= Column(String)
+    email = Column(String)
+    password = Column(String)
+
+in schemas .py -------
+class User(BaseModel):
+    name:str
+    email:str
+    password:str
+then create this
+@app.post('/user')
+def create_user(request:schemas.User,db:Session =Depends(get_db)):
+    new_user =models.User(name=request.name,email=request.email,password=request.password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+but password is not hashed
+----------------------password hash/encrypted--------------
+
+
+pip install passlib
+pip install bcrypt
+---------->
+		from passlib.context import CryptContext
+
+pwd_cxt = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+@app.post('/user')
+def create_user(request:schemas.User,db:Session =Depends(get_db)):
+    hashedPassword = pwd_cxt.hash(request.password)
+    new_user =models.User(name=request.name,email=request.email,password= hashedPassword)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+-----------------create hashing .py
+
+
+from passlib.context import CryptContext
+
+
+pwd_cxt = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class Hash():
+    def bycript(password: str):
+        return pwd_cxt.hash(password)
+
+and then pass
+
+    new_user =models.User(name=request.name,email=request.email,password=hashing.Hash.bycript(request.password))
+
+also can 
+from .hashing import Hash
+and then 
+    new_user =models.User(name=request.name,email=request.email,password=Hash.bycript(request.password))
+
+----------------show user with id---------
+@app.get('/user/{id}',response_model=schemas.ShowUser)
+def get_user(id:int,db:Session =Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id==id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f'User with the id {id} is not available')
+    return user
+
+
+class ShowUser(BaseModel):
+    name:str
+    email:str
+    class Config():
+        orm_mode=True----------only name and email will show and pass with response_model=schemas.ShowUser
+
+-------------------Doc TAg-------------
+
+
+
+in the  path operation decorator we can add simply with tags=['name']
+
+
+
+
+----------------Relation ship---------------
+
+from sqlalchemy.orm import relationship
+
+
+
+from sqlalchemy import Column, ForeignKey,Integer,String
+from .database import Base
+from sqlalchemy.orm import relationship
+
+
+
+class Blog(Base):
+    __tablename__='blogs'
+    id = Column(Integer,primary_key=True,index=True)
+    title= Column(String)
+    body = Column(String)
+    user_id =Column(Integer,ForeignKey('users.id'))
+
+    creator = relationship('User',back_populates='blogs')
+
+class User(Base):
+    __tablename__='users'
+    id = Column(Integer,primary_key=True,index=True)
+    name= Column(String)
+    email = Column(String)
+    password = Column(String)
+
+    blogs = relationship('Blog',back_populates='creator')
+
+
+if we want to show blog with id and who is create it we can customize the schemas
+class ShowBlog(BaseModel):
+    title : str
+    body: str
+    creator: ShowUser
+    class Config():
+        orm_mode=True
+
+
+
+
+
+also show user with all blogs:
+class ShowUser(BaseModel):
+    name:str
+    email:str
+    blogs: List[Blog]=[]
+--------------------------------
+class BlogBase(BaseModel):
+    title:str
+    body: str
+    
+
+class Blog(BlogBase):
+    class Config():
+        orm_mode=True
+
+
+
+The warning states that Pydantic v2 has renamed orm_mode to from_attributes in model configurations.
+
+------------------------------------API ROUTER----------------------------
+inside the app create a routers directory
+then create __init__.py that in will be a module
+create user.py
+create blog.py
+
+inside blog.py--------------->
+
+
+	
+from fastapi import APIRouter
+
+router =APIRouter()
+
+
+then add all api for blog inside the blog.py in routers directory
+
+------->
+	remove all the path decorator in user.py and blog.py
+and imports all the file need also move da get db function from main to database .py
+also include router to connect routes directory py file to main
+
+----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+Last Update:
+Exploring FastAPI.
+learn CRUD on fastapi,routing,model,schema, sqlalchemy,jwt token.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
