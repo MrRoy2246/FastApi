@@ -28,7 +28,7 @@ def update(id:int,request:schemas.Blog,db:Session):
     blog = blog_query.first()
     if not blog:
         raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
-    blog_query.update(request.model_dump())
+    blog_query.update(request.model_dump(exclude_unset=True))
     db.commit()
     
     return {"message": "Blog updated successfully"}
